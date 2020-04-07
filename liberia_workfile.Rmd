@@ -91,6 +91,9 @@ liberia_sp$logit_Ascp <- log((liberia_sp$Asc_positive + 0.5)/
 liberia_sp$logit_HKp <- log((liberia_sp$HK_positive + 0.5)/
                            (liberia_sp$HK_examined - liberia_sp$HK_positive + 0.5))
 
+#Write and save liberia_sp with logit prevalence
+write.csv(liberia,"data/liberia_sp.csv", row.names = TRUE)
+
 # Compare raw and logit prevalence (TT)
 hist(liberia_sp$TT_positive/liberia_sp$TT_examined, xlab = " ", main = "Observed",
 border = "white", col = "royalblue2")
