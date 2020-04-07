@@ -1,0 +1,238 @@
+---
+title: "final"
+author: "Andrew"
+date: "4/6/2020"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+
+if (!require("pacman")) install.packages("pacman")
+pkgs = c("PrevMap", "tmap", "Hmisc", "automap", "sf", "psych") # package names
+pacman::p_load(pkgs, character.only = T)
+
+
+library(dplyr)
+library(sf)
+library(tmap)
+library(geoR)
+
+liberia <- read.csv("data/Liberia_STH.csv")
+
+liberia <- liberia %>% 
+  filter(Age_start > 4) %>% 
+  filter(Age_end < 16) %>% 
+  filter(Georeliability != 4)
+  
+write.csv(liberia,"data/liberia_clean.csv", row.names = TRUE)
+
+#transform the liberia data to a sf object. 
+liberia_sp <- liberia %>% 
+  st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326)
+
+#plot only the points
+plot(liberia_sp$geometry)
+
+#maps all the schools that were surveryed on OpenStreetMap
+tmap_leaflet(tm_basemap(server = "OpenStreetMap.BlackAndWhite") +
+               tm_shape(liberia_sp) +
+               tm_symbols(col = "yellow",
+                          size = .1))
+
+#now we want to add the prevalence data
+#First define the binds to display the TT prevalence
+
+breaks <- c(0, 0.2, 0.5, 1)
+
+#TT_prevalence
+tmap_leaflet(tm_basemap(server = "OpenStreetMap.BlackAndWhite") +
+tm_shape(liberia_sp) +
+tm_symbols(col = "TT_prevalence",
+breaks = breaks,
+size = .2,
+palette = "YlGnBu"))
+
+#Asc_prevalence
+tmap_leaflet(tm_basemap(server = "OpenStreetMap.BlackAndWhite") +
+tm_shape(liberia_sp) +
+tm_symbols(col = "Asc_prevalence",
+breaks = breaks,
+size = .2,
+palette = "YlGnBu"))
+
+#HK_prevalence
+tmap_leaflet(tm_basemap(server = "OpenStreetMap.BlackAndWhite") +
+tm_shape(liberia_sp) +
+tm_symbols(col = "HK_prevalence",
+breaks = breaks,
+size = .2,
+palette = "YlGnBu"))
+
+
+#Semivaropgram analysis
+
+# Transform the prevalence to the empirical logit scale (TT)
+liberia_sp$logit_TTp <- log((liberia_sp$TT_positive + 0.5)/
+                           (liberia_sp$TT_examined - liberia_sp$TT_positive + 0.5))
+
+# Transform the prevalence to the empirical logit scale (ASC)
+liberia_sp$logit_Ascp <- log((liberia_sp$Asc_positive + 0.5)/
+                           (liberia_sp$Asc_examined - liberia_sp$Asc_positive + 0.5))
+
+# Transform the prevalence to the empirical logit scale (HK)
+liberia_sp$logit_HKp <- log((liberia_sp$HK_positive + 0.5)/
+                           (liberia_sp$HK_examined - liberia_sp$HK_positive + 0.5))
+
+# Compare raw and logit prevalence (TT)
+hist(liberia_sp$TT_positive/liberia_sp$TT_examined, xlab = " ", main = "Observed",
+border = "white", col = "royalblue2")
+hist(liberia_sp$logit_TTp, xlab = " ", main = "Empirical logit",
+border = "white", col = "seagreen3")
+
+# Compare raw and logit prevalence (Asc)
+hist(liberia_sp$Asc_positive/liberia_sp$Asc_examined, xlab = " ", main = "Observed",
+border = "white", col = "royalblue2")
+hist(liberia_sp$logit_Ascp, xlab = " ", main = "Empirical logit",
+border = "white", col = "seagreen3")
+
+# Compare raw and logit prevalence (HV)
+hist(liberia_sp$HK_positive/liberia_sp$HK_examined, xlab = " ", main = "Observed",
+border = "white", col = "royalblue2")
+hist(liberia_sp$logit_HKp, xlab = " ", main = "Empirical logit",
+border = "white", col = "seagreen3")
+
+source("ggvario.R")
+
+
+#Generate the empirical variogram and plot it
+#Asc
+ggvario(coords = st_coordinates(liberia_sp), data = liberia_sp$logit_Ascp)
+#TT
+ggvario(coords = st_coordinates(liberia_sp), data = liberia_sp$logit_TTp)
+#HK
+ggvario(coords = st_coordinates(liberia_sp), data = liberia_sp$logit_HKp)
+
+ #Variogram Fitting Asc
+variofit_Asc <- autofitVariogram(formula = logit_Ascp ~ 1,
+                             input_data = as(liberia_sp, "Spatial"))
+plot(variofit_Asc)
+
+#Variogram Fitting TT
+variofit_TTp <- autofitVariogram(formula = logit_TTp ~ 1,
+                             input_data = as(liberia_sp, "Spatial"))
+plot(variofit_TTp)
+
+#Variogram Fitting HK
+variofit_HKp <- autofitVariogram(formula = logit_HKp ~ 1,
+                             input_data = as(liberia_sp, "Spatial"))
+plot(variofit_HKp)
+
+
+#KRIGING 
+
+# Reproject the coordinates to Mercatori in KM
+liberia_sp <- st_transform(liberia_sp, crs = "+init=epsg:3857 +units=km")
+
+#Perform ordinary Krigging and plot the results
+#TT
+TTkriging <- autoKrige(formula = logit_TTp ~ 1, input_data = as(liberia_sp, "Spatial"))
+plot(TTkriging)
+
+#ASC
+Asckriging <- autoKrige(formula = logit_Ascp ~ 1, input_data = as(liberia_sp, "Spatial"))
+plot(Asckriging)
+
+#HK
+HKkriging <- autoKrige(formula = logit_HKp ~ 1, input_data = as(liberia_sp, "Spatial"))
+plot(HKkriging)
+
+
+
+# Load the shapefile and plot it
+africa <- st_read("data/datat/Africa.shp")
+
+par(mar=c(0, 0, 0, 0))
+plot(africa$geometry)
+
+# Assign prpjections and change CRS
+africa <- africa %>%
+st_set_crs(4326) %>%
+st_transform(crs = "+init=epsg:3857 +units=km")
+
+
+# Crop the map based on the observed points
+map <- st_crop(africa, liberia_sp)
+# Plot the map with the points
+par(mar=c(0, 0, 0, 0))
+plot(map$geometry, col = "white")
+plot(liberia_sp$geometry, add = T)
+
+# Generate predictive locations at 5km resolution
+par(mar=c(0, 0, 0, 0))
+pred_locations <- st_make_grid(map, cellsize = 2.5, what = "centers")
+plot(map$geometry, col = "white")
+plot(pred_locations, cex = .01, col = "red", pch = 19, add = T)
+
+# Perform ordarinary kriging for the prediction locations
+#TT
+TT_orkriging <- autoKrige(formula = logit_TTp ~ 1, input_data = as(liberia_sp, "Spatial"),
+new_data = as(pred_locations, "Spatial"),
+verbose = F)
+plot(TT_orkriging)
+
+#HK
+HK_orkriging <- autoKrige(formula = logit_HKp ~ 1, input_data = as(liberia_sp, "Spatial"),
+new_data = as(pred_locations, "Spatial"),
+verbose = F)
+plot(HK_orkriging)
+
+#Asc
+Asc_orkriging <- autoKrige(formula = logit_Ascp ~ 1, input_data = as(liberia_sp, "Spatial"),
+new_data = as(pred_locations, "Spatial"),
+verbose = F)
+plot(Asc_orkriging)
+
+
+# Convert them to the prevalence scale
+#TT
+TTpred_prevalence <- psych::logistic(TT_orkriging$krige_output$var1.pred)
+# Generate a raster and plot the results
+TTprevalence <- rasterFromXYZ(xyz = data.frame(st_coordinates(pred_locations),
+                                             TTpred_prevalence),
+                            crs = crs(liberia_sp))
+plot(TTprevalence)
+
+#HK
+# Convert them to the prevalence scale
+HKpred_prevalence <- psych::logistic(HK_orkriging$krige_output$var1.pred)
+
+# Generate a raster and plot the results
+HKprevalence <- rasterFromXYZ(xyz = data.frame(st_coordinates(pred_locations),
+                                             HKpred_prevalence),
+                            crs = crs(liberia_sp))
+plot(HKprevalence)
+
+#Asc
+# Convert them to the prevalence scale
+Ascpred_prevalence <- psych::logistic(Asc_orkriging$krige_output$var1.pred)
+
+# Generate a raster and plot the results
+Ascprevalence <- rasterFromXYZ(xyz = data.frame(st_coordinates(pred_locations),
+                                             Ascpred_prevalence),
+                            crs = crs(liberia_sp))
+plot(Ascprevalence)
+
+# Export the result to the Outcome folder
+writeRaster(TTprevalence, "outcome/TTprediction.tif", format = 'GTiff',overwrite= TRUE)
+writeRaster(HKprevalence, "outcome/HKprediction.tif", format = 'GTiff',overwrite= TRUE)
+writeRaster(Ascprevalence, "outcome/Ascprediction.tif", format = 'GTiff',overwrite= TRUE)
+
+
+
+
+
+
+```
+
