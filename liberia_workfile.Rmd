@@ -161,27 +161,28 @@ plot(HKkriging)
 
 # Load the shapefile and plot it
 africa <- st_read("data/datat/Africa.shp")
+LBR_ADMO <- st_read("data/datat/LBR_ADM0.shp")
 
 par(mar=c(0, 0, 0, 0))
 plot(africa$geometry)
 
 # Assign prpjections and change CRS
-africa <- africa %>%
+LBR_ADMO <- LBR_ADMO %>%
 st_set_crs(4326) %>%
 st_transform(crs = "+init=epsg:3857 +units=km")
 
 
 # Crop the map based on the observed points
-map <- st_crop(africa, liberia_sp)
+#map <- st_crop(africa, LBR_ADMO)
 # Plot the map with the points
-par(mar=c(0, 0, 0, 0))
-plot(map$geometry, col = "white")
-plot(liberia_sp$geometry, add = T)
+#par(mar=c(0, 0, 0, 0))
+#plot(map$geometry, col = "white")
+#plot(liberia_sp$geometry, add = T)
 
 # Generate predictive locations at 5km resolution
 par(mar=c(0, 0, 0, 0))
-pred_locations <- st_make_grid(map, cellsize = 2.5, what = "centers")
-plot(map$geometry, col = "white")
+pred_locations <- st_make_grid(LBR_ADMO, cellsize = 2.5, what = "centers")
+plot(LBR_ADMO$geometry, col = "white")
 plot(pred_locations, cex = .01, col = "red", pch = 19, add = T)
 
 # Perform ordarinary kriging for the prediction locations
